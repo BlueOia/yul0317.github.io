@@ -1095,6 +1095,21 @@
       font-size: 12px;
     }
 
+    .sim-result .stage {
+      margin-top: 8px;
+      background: #fff;
+      box-shadow: none;
+      text-align: left;
+    }
+
+    .sim-result .stage-images {
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    }
+
+    .sim-result .stage-image {
+      max-height: 180px;
+    }
+
     .sim-log {
       margin: 8px 0 0;
       padding: 0;
@@ -2180,6 +2195,26 @@
       return thunderGazeMarkerGroups(player, thunderPattern, shouldSoakThunder, hasGaze).markerAnswers;
     }
 
+    function blizzardSpreadMarkerGroups(player, blizzardPattern, shouldSoakBlizzard, isSpreadTarget) {
+      const support = isSupportPlayer(player);
+      const firstPattern = Number(blizzardPattern) === 1;
+      const blizzardMarkers = support
+        ? (shouldSoakBlizzard
+          ? (firstPattern ? ["1", "3"] : ["2", "4"])
+          : (firstPattern ? ["2", "4"] : ["1", "3"]))
+        : (shouldSoakBlizzard
+          ? (firstPattern ? ["5", "7"] : ["6", "8"])
+          : (firstPattern ? ["6", "8"] : ["5", "7"]));
+      const spreadMarkers = support
+        ? (isSpreadTarget ? ["3", "4"] : ["1", "2"])
+        : (isSpreadTarget ? ["7", "8"] : ["5", "6"]);
+      return {
+        blizzardMarkers,
+        spreadMarkers,
+        markerAnswers: blizzardMarkers.filter((marker) => spreadMarkers.includes(marker))
+      };
+    }
+
     function chaosAnswerFor(chaos, truth) {
       if (chaos === "혼돈의 불") return truth === "진짜" ? "밖" : "안";
       return truth === "진짜" ? "안" : "밖";
@@ -2344,12 +2379,18 @@
       const eventTime = state.schedule[event].time;
       const marker = spreadMarkerFor(state.player, action.spread);
       const movement = movementAnswerFor(action.accel);
-      const answer = `${marker} / ${movement}`;
+      const hasBlizzard = eventTime === "01:46";
+      const blizzardPattern = pick([1, 2]);
+      const blizzardGroups = hasBlizzard
+        ? blizzardSpreadMarkerGroups(state.player, blizzardPattern, state.blizzardMemory === "가짜", action.spread === "산개")
+        : null;
+      const markerAnswers = blizzardGroups ? blizzardGroups.markerAnswers : [marker];
+      const answer = `${markerAnswers.join(", ")} / ${movement}`;
       const answers = movement === "움직임 상관없음"
-        ? [`${marker} / 움직임`, `${marker} / 안 움직임`, answer]
-        : [answer];
+        ? markerAnswers.flatMap((answerMarker) => [`${answerMarker} / 움직임`, `${answerMarker} / 안 움직임`, `${answerMarker} / 움직임 상관없음`])
+        : markerAnswers.map((answerMarker) => `${answerMarker} / ${movement}`);
       return {
-        title: `${isGc1 ? "빠른" : "느린"} 물/번개/가속도`,
+        title: `${hasBlizzard ? "느린" : "빠른"} 물/번개/가속도`,
         time: eventTime,
         prompt: "부여된 디버프 기준으로 몇 번 위치에서 어떻게 처리할까?",
         facts: [
@@ -2360,14 +2401,17 @@
         answer,
         answers,
         type: "position-move",
-        image: "빠른_물_번개_가속_디버프처리.png",
-        imageAlt: "물 번개 가속도 처리",
-        markerChoices: ["1", "2", "3", "4"],
+        image: hasBlizzard ? `느린_물_번개_가속_블리자가_${state.blizzardMemory}_${blizzardPattern}.webp` : "빠른_물_번개_가속_디버프처리.webp",
+        imageAlt: hasBlizzard ? `느린 물 번개 가속 블리자가 ${state.blizzardMemory} ${blizzardPattern} 처리` : "물 번개 가속도 처리",
+        markerChoices: hasBlizzard ? ["1", "2", "3", "4", "5", "6", "7", "8"] : ["1", "2", "3", "4"],
         movementChoices: ["움직임", "안 움직임"],
-        answerMarker: marker,
+        answerMarker: markerAnswers[0],
+        answerMarkers: markerAnswers,
         answerMovement: movement === "움직임 상관없음" ? "움직임" : movement,
         anyMovement: movement === "움직임 상관없음",
-        explain: `물/번개는 진짜면 번개 산개, 가짜면 물 산개. ${state.player} 기준 최종 위치는 ${marker}번. 가속도 처리는 ${movement}.`
+        explain: hasBlizzard
+          ? `물/번개는 진짜면 번개 산개, 가짜면 물 산개. 블리자가는 ${state.blizzardMemory}이므로 ${state.blizzardMemory === "가짜" ? "밟기" : "피하기"}: ${blizzardGroups.blizzardMarkers.join(", ")}번. ${action.spread === "산개" ? "산개 대상자" : "본대 대상자"} 위치는 ${blizzardGroups.spreadMarkers.join(", ")}번. 최종 위치는 ${markerAnswers.join(", ")}번. 가속도 처리는 ${movement}.`
+          : `물/번개는 진짜면 번개 산개, 가짜면 물 산개. ${state.player} 기준 최종 위치는 ${marker}번. 가속도 처리는 ${movement}.`
       };
     }
 
@@ -2433,6 +2477,7 @@
       const chaos = pick(["혼돈의 불", "혼돈의 물"]);
       const truth = chaos === "혼돈의 불" ? state.fireTruth : state.waterTruth;
       const answer = chaosAnswerFor(chaos, truth);
+      const fireMarkerAnswer = answer === "안" ? "1" : "2";
       return {
         title: chaos,
         time: chaos === "혼돈의 불" ? "01:41" : "02:04",
@@ -2441,9 +2486,14 @@
           fact("디버프", `${icon(chaos === "혼돈의 불" ? "혼돈의 불.webp" : "혼돈의 물.webp", chaos)} ${chaos}`),
           fact("판정", `${quizTruthIcon(truth)} ${truth}`)
         ],
-        choices: ["안", "밖"],
-        answer,
-        explain: "혼돈의 불은 진짜 밖/가짜 안. 혼돈의 물은 진짜 안/가짜 밖."
+        choices: chaos === "혼돈의 불" ? ["1", "2"] : ["안", "밖"],
+        answer: chaos === "혼돈의 불" ? fireMarkerAnswer : answer,
+        type: chaos === "혼돈의 불" ? "image-marker" : "text",
+        image: "혼돈의_불.webp",
+        imageAlt: "혼돈의 불 처리",
+        explain: chaos === "혼돈의 불"
+          ? `혼돈의 불은 진짜면 히트박스 밖, 가짜면 안쪽입니다. 1번은 안쪽, 2번은 히트박스 밖이므로 정답은 ${fireMarkerAnswer}번.`
+          : "혼돈의 물은 진짜 안, 가짜 밖."
       };
     }
 
@@ -2514,6 +2564,7 @@
 
       if (currentSim.type === "position-move") {
         const state = { marker: "", movement: "" };
+        const answerMarkers = currentSim.answerMarkers || [currentSim.answerMarker];
         simChoices.innerHTML = `
           <div class="sim-choice-guide">
             <img src="img/simul/${currentSim.image}" alt="${currentSim.imageAlt || ""}">
@@ -2538,11 +2589,11 @@
             if (!state.marker || !state.movement) return;
 
             const movementCorrect = currentSim.anyMovement || state.movement === currentSim.answerMovement;
-            const correct = state.marker === currentSim.answerMarker && movementCorrect;
+            const correct = answerMarkers.includes(state.marker) && movementCorrect;
             document.querySelectorAll("#simChoices .sim-choice").forEach((choice) => {
               choice.disabled = true;
               if (
-                (choice.dataset.part === "marker" && choice.dataset.answer === currentSim.answerMarker) ||
+                (choice.dataset.part === "marker" && answerMarkers.includes(choice.dataset.answer)) ||
                 (choice.dataset.part === "movement" && (currentSim.anyMovement || choice.dataset.answer === currentSim.answerMovement))
               ) {
                 choice.classList.add("correct");
@@ -2550,7 +2601,7 @@
             });
             document.querySelectorAll("#simChoices .sim-choice.selected").forEach((choice) => {
               const isCorrect =
-                (choice.dataset.part === "marker" && choice.dataset.answer === currentSim.answerMarker) ||
+                (choice.dataset.part === "marker" && answerMarkers.includes(choice.dataset.answer)) ||
                 (choice.dataset.part === "movement" && (currentSim.anyMovement || choice.dataset.answer === currentSim.answerMovement));
               if (!isCorrect) choice.classList.add("wrong");
             });
@@ -2672,6 +2723,18 @@
         "없음": "-"
       };
       return map[name] || name;
+    }
+
+    function personalDebuffLine(data, truth) {
+      const debuffs = [];
+      if (data.main && data.main !== "없음") debuffs.push(mechanicIcon(data.main));
+      if (data.accel) debuffs.push(mechanicIcon("가속도"));
+      const value = debuffs.length ? `${debuffs.join(" ")} (${truthIcon(truth)})` : "없음";
+      return `내 디버프: ${value}`;
+    }
+
+    function handlingDebuffLine(debuff, truth) {
+      return `처리 디버프: ${debuff} (${truthIcon(truth)})`;
     }
 
     function shuffle(list) {
@@ -2872,6 +2935,21 @@
       `;
     }
 
+    function seqStageGuideHtml() {
+      if (!seq || seq.step < 10) return "";
+      const stage = document.querySelectorAll(".stage-grid .stage")[seq.step - 1];
+      if (!stage) return "";
+      return stage.cloneNode(true).outerHTML;
+    }
+
+    function seqResultDetail(fallback, options = {}) {
+      const guide = seqStageGuideHtml();
+      if (!guide) return fallback;
+      const prefixLines = [options.myDebuff, options.handlingDebuff].filter(Boolean);
+      const prefix = prefixLines.length ? `${prefixLines.join("<br>")}<br><br>` : "";
+      return `${prefix}${guide}`;
+    }
+
     function setSeqChoices(choices, answer, explain, options = {}) {
       seqNextBtn.disabled = true;
       seqNextBtn.textContent = "선택 필요";
@@ -2893,7 +2971,7 @@
           setResultState(
             seqResult,
             correct,
-            `정답: ${answer}.<br>${explain}`
+            seqResultDetail(`정답: ${answer}.<br>${explain}`, { handlingDebuff: options.handlingDebuff })
           );
           seq.completedSteps.add(seq.step);
           renderSeqBuffs();
@@ -2909,6 +2987,7 @@
       seqNextBtn.disabled = true;
       seqNextBtn.textContent = "선택 필요";
       const state = { marker: "", movement: "" };
+      const answerMarkers = config.answerMarkers || [config.answerMarker];
       seqChoices.innerHTML = `
         <div class="sim-choice-guide">
           <img src="img/simul/${config.image}" alt="${config.imageAlt || ""}">
@@ -2937,11 +3016,11 @@
           if (!state.marker || !state.movement) return;
 
           const movementCorrect = config.anyMovement || state.movement === config.answerMovement;
-          const correct = state.marker === config.answerMarker && movementCorrect;
+          const correct = answerMarkers.includes(state.marker) && movementCorrect;
           document.querySelectorAll("#seqChoices .sim-choice").forEach((choice) => {
             choice.disabled = true;
             if (
-              (choice.dataset.part === "marker" && choice.dataset.answer === config.answerMarker) ||
+              (choice.dataset.part === "marker" && answerMarkers.includes(choice.dataset.answer)) ||
               (choice.dataset.part === "movement" && (config.anyMovement || choice.dataset.answer === config.answerMovement))
             ) {
               choice.classList.add("correct");
@@ -2949,16 +3028,16 @@
           });
           document.querySelectorAll("#seqChoices .sim-choice.selected").forEach((choice) => {
             const isCorrect =
-              (choice.dataset.part === "marker" && choice.dataset.answer === config.answerMarker) ||
+              (choice.dataset.part === "marker" && answerMarkers.includes(choice.dataset.answer)) ||
               (choice.dataset.part === "movement" && (config.anyMovement || choice.dataset.answer === config.answerMovement));
             if (!isCorrect) choice.classList.add("wrong");
           });
-          const answer = `${config.answerMarker} / ${config.anyMovement ? "움직임 상관없음" : config.answerMovement}`;
+          const answer = `${answerMarkers.join(", ")} / ${config.anyMovement ? "움직임 상관없음" : config.answerMovement}`;
           const selected = `${state.marker} / ${state.movement}`;
           setResultState(
             seqResult,
             correct,
-            `정답: ${answer}.<br>${config.explain}`
+            seqResultDetail(`정답: ${answer}.<br>${config.explain}`, { myDebuff: config.myDebuff })
           );
           seq.completedSteps.add(seq.step);
           renderSeqBuffs();
@@ -2998,7 +3077,7 @@
           setResultState(
             seqResult,
             correct,
-            `정답: ${config.answer}.<br>${config.explain}`
+            seqResultDetail(`정답: ${config.answer}.<br>${config.explain}`, { handlingDebuff: config.handlingDebuff })
           );
           seq.completedSteps.add(seq.step);
           renderSeqBuffs();
@@ -3012,6 +3091,40 @@
 
     function setSeqSpreadChoices(event, action, options = {}) {
       const answer = `${action.spread} / ${action.accel}`;
+      if (event.endsWith("Spread") && options.blizzardImage) {
+        const data = event.startsWith("gc1") ? seq.gc1Personal : seq.gc2Personal;
+        const truth = event.startsWith("gc1") ? seq.gc1 : seq.gc2;
+        const blizzardPattern = pick([1, 2]);
+        const shouldSoakBlizzard = seq.blizzardMemory === "가짜";
+        const markerGroups = blizzardSpreadMarkerGroups(seq.player, blizzardPattern, shouldSoakBlizzard, action.spread === "산개");
+        const movement = movementAnswerFor(action.accel);
+        const answerMovement = movement === "움직임 상관없음" ? "움직임" : movement;
+        setSeqPositionMoveChoices({
+          image: `느린_물_번개_가속_블리자가_${seq.blizzardMemory}_${blizzardPattern}.webp`,
+          imageAlt: `느린 물 번개 가속 블리자가 ${seq.blizzardMemory} ${blizzardPattern} 처리`,
+          markerChoices: ["1", "2", "3", "4", "5", "6", "7", "8"],
+          movementChoices: ["움직임", "안 움직임"],
+          answerMarker: markerGroups.markerAnswers[0],
+          answerMarkers: markerGroups.markerAnswers,
+          answerMovement,
+          anyMovement: action.accel === "가속도 없음",
+          myDebuff: personalDebuffLine(data, truth),
+          explain: [
+            `블리자가는 ${seq.blizzardMemory}입니다.`,
+            shouldSoakBlizzard
+              ? `블리자가를 밟아야 하므로 ${markerGroups.blizzardMarkers.join(", ")}번을 봅니다.`
+              : `블리자가를 피해야 하므로 ${markerGroups.blizzardMarkers.join(", ")}번을 봅니다.`,
+            action.spread === "산개"
+              ? `산개 대상자이므로 ${markerGroups.spreadMarkers.join(", ")}번을 봅니다.`
+              : `본대 대상자이므로 ${markerGroups.spreadMarkers.join(", ")}번을 봅니다.`,
+            `최종 위치는 ${markerGroups.markerAnswers.join(", ")}번입니다.`,
+            action.accel === "가속도 없음"
+              ? "가속도 폭탄이 없으므로 움직임 여부는 정답에 영향을 주지 않습니다."
+              : `가속도 폭탄은 ${action.accel === "멈춤" ? "안 움직임" : "움직임"} 처리입니다.`
+          ].join("<br>")
+        });
+        return;
+      }
       if (event.endsWith("Spread") && options.fastImage) {
         const isSupport = isSupportPlayer(seq.player);
         const data = event.startsWith("gc1") ? seq.gc1Personal : seq.gc2Personal;
@@ -3030,13 +3143,14 @@
         const answerMarker = spreadMarkerFor(seq.player, action.spread);
         const answerMovement = movementAnswerFor(action.accel) === "움직임 상관없음" ? "움직임" : movementAnswerFor(action.accel);
         setSeqPositionMoveChoices({
-          image: "빠른_물_번개_가속_디버프처리.png",
-          imageAlt: "1회차 물 번개 가속도 처리",
+          image: "빠른_물_번개_가속_디버프처리.webp",
+          imageAlt: "빠른 물 번개 가속 디버프처리",
           markerChoices: ["1", "2", "3", "4"],
           movementChoices: ["움직임", "안 움직임"],
           answerMarker,
           answerMovement,
           anyMovement: action.accel === "가속도 없음",
+          myDebuff: personalDebuffLine(data, truth),
           explain: [
             `선택 직업: ${seq.player} (${roleText}).`,
             spreadReason,
@@ -3101,7 +3215,7 @@
           setResultState(
             seqResult,
             correct,
-            `정답 위치: ${config.markerAnswers.join(", ")}번 / ${config.gazeAnswer}.<br>${config.explain}`
+            seqResultDetail(`정답 위치: ${config.markerAnswers.join(", ")}번 / ${config.gazeAnswer}.<br>${config.explain}`, { handlingDebuff: config.handlingDebuff })
           );
           seq.completedSteps.add(seq.step);
           renderSeqBuffs();
@@ -3362,6 +3476,7 @@
               imageAlt: `선더가 ${seq.thunderMemory} ${thunderPattern} 처리`,
               markerAnswers,
               gazeAnswer: gazeAnswerText,
+              handlingDebuff: handlingDebuffLine(icon("저주의 외침.webp", "저주의 외침"), truth),
               explain: [
                 `선더가는 ${seq.thunderMemory}입니다.`,
                 shouldSoakThunder
@@ -3382,7 +3497,15 @@
           seq.timePoint = "01:41";
           seqPrompt.textContent = "혼돈의 불은 히트박스 기준 어디서 피할까요?";
           renderSeqBuffs();
-          setSeqChoices(["안", "밖"], fireAnswer, `혼돈의 불은 진짜면 밖, 가짜면 안.`);
+          const fireMarkerAnswer = fireAnswer === "안" ? "1" : "2";
+          setSeqImageMarkerChoices({
+            image: "혼돈의_불.webp",
+            imageAlt: "혼돈의 불 처리",
+            choices: ["1", "2"],
+            answer: fireMarkerAnswer,
+            handlingDebuff: handlingDebuffLine(icon("혼돈의 불.webp", "혼돈의 불"), seq.fireTruth),
+            explain: `혼돈의 불은 진짜면 히트박스 밖, 가짜면 안쪽입니다. 1번은 안쪽, 2번은 히트박스 밖이므로 정답은 ${fireMarkerAnswer}번.`
+          });
         },
         13: () => {
           const event = scheduledEvent(13);
@@ -3400,7 +3523,7 @@
           if (isGaze) {
             setSeqChoices(gazeChoices(action.hasGaze), gazeChoiceAnswer(action.hasGaze, truth), `${eventLabel(event)}은 ${truth}이므로 ${gazeChoiceAnswer(action.hasGaze, truth)}. 블리자가도 기억합니다.`);
           } else {
-            setSeqSpreadChoices(event, action);
+            setSeqSpreadChoices(event, action, { blizzardImage: true });
           }
         },
         14: () => {
@@ -3416,7 +3539,12 @@
           const action = personalGrandCrossAction(data, truth);
           renderSeqBuffs();
           if (isGaze) {
-            setSeqChoices(gazeChoices(action.hasGaze), gazeChoiceAnswer(action.hasGaze, truth), `${eventLabel(event)}은 ${truth}이므로 ${gazeChoiceAnswer(action.hasGaze, truth)}.`);
+            setSeqChoices(
+              gazeChoices(action.hasGaze),
+              gazeChoiceAnswer(action.hasGaze, truth),
+              `${eventLabel(event)}은 ${truth}이므로 ${gazeChoiceAnswer(action.hasGaze, truth)}.`,
+              { handlingDebuff: handlingDebuffLine(icon("저주의 외침.webp", "저주의 외침"), truth) }
+            );
           } else {
             setSeqSpreadChoices(event, action);
           }
@@ -3437,7 +3565,9 @@
             "직선 밟기 / 부채꼴 피하기 / 물 밖",
             "직선 밟기 / 부채꼴 밟기 / 물 안",
             "직선 밟기 / 부채꼴 밟기 / 물 밖"
-          ], answer, `마력 방출은 저장과 방출이 같으면 피하고 다르면 밟기. 혼돈의 물은 진짜면 안, 가짜면 밖.`);
+          ], answer, `마력 방출은 저장과 방출이 같으면 피하고 다르면 밟기. 혼돈의 물은 진짜면 안, 가짜면 밖.`, {
+            handlingDebuff: handlingDebuffLine(icon("혼돈의 물.webp", "혼돈의 물"), seq.waterTruth)
+          });
         },
         16: () => {
           seq.title = "16. 전멸기 / 5페이즈 전환";
