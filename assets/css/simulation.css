@@ -939,7 +939,14 @@ body.simulation-active .seq-layout {
 }
 
 .seq-active-panel:has(.sim-choice-guide) .sim-result .stage-images>* {
-  flex: 0 0 min(280px, 80vw);
+  flex: 0 0 auto;
+}
+
+.seq-active-panel:has(.sim-choice-guide) .sim-result .stage-image {
+  width: auto;
+  max-width: none;
+  height: auto;
+  object-fit: contain;
 }
 
 .seq-active-panel:has(.sim-choice-guide) .sim-result .stage {

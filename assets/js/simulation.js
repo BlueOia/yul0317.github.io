@@ -803,6 +803,7 @@ function renderSeqPlayerPicker() {
   renderSeqBuffs();
   updateSeqAccordionState();
   syncSeqInlineNext();
+  openSeqExpansion(0);
 
   document.querySelectorAll("#seqChoices .sim-choice").forEach((button) => {
     button.addEventListener("click", () => {
