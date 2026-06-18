@@ -46,7 +46,7 @@ let seq = null;
 let selectedSeqPlayer = "";
 let seqChoiceHandler = null;
 const cheatState = {
-  accelRound: "",
+  accelRound: "1회차",
   gc1Truth: "진짜",
   gc1Timing: "빠른",
   chaos1Truth: "진짜",

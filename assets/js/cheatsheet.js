@@ -118,9 +118,6 @@ function updateCheatButtonStates(root = document) {
         ? `<img src="${iconData[0]}" alt="${iconData[1]}"><span>${label}</span>`
         : `<span>${label}</span>`;
       button.classList.toggle("active", button.dataset.value === value);
-      if (key === "accelRound") {
-        button.disabled = Boolean(cheatState.accelRound && button.dataset.value !== cheatState.accelRound);
-      }
     });
   });
 }
@@ -208,9 +205,7 @@ function bindCheatButtons(root = document) {
     button.addEventListener("click", () => {
       const group = button.closest(".cheat-buttons");
       const key = group.dataset.cheatKey;
-      cheatState[key] = key === "accelRound" && cheatState[key] === button.dataset.value
-        ? ""
-        : button.dataset.value;
+      cheatState[key] = button.dataset.value;
       renderCheatSheet();
     });
   });
