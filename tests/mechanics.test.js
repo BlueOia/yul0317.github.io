@@ -23,12 +23,32 @@ vm.createContext(context);
 vm.runInContext(
   `const seqPlayers = ${JSON.stringify(seqPlayers)};
   ${mechanicsSource}
-  globalThis.mechanicsApi = { makeEncounterState, accelAssignmentAtTiming };`,
+  globalThis.mechanicsApi = {
+    makeEncounterState,
+    accelAssignmentAtTiming,
+    slowGazeMarkerFor,
+    gazeShortAnswer
+  };`,
   context
 );
 
 const playerNames = seqPlayers.map((player) => player.name);
 const groups = [playerNames.slice(0, 4), playerNames.slice(4)];
+
+const slowGazeCases = [
+  ["탱커 1", false, "1"],
+  ["힐러 2", true, "2"],
+  ["딜러 1", true, "3"],
+  ["딜러 4", false, "4"]
+];
+slowGazeCases.forEach(([player, hasGaze, marker]) => {
+  assert(
+    context.mechanicsApi.slowGazeMarkerFor(player, hasGaze) === marker,
+    `${player}: 느린 마안 위치 계산이 잘못됨`
+  );
+});
+assert(context.mechanicsApi.gazeShortAnswer("진짜") === "안본다", "진짜 마안 행동이 잘못됨");
+assert(context.mechanicsApi.gazeShortAnswer("가짜") === "본다", "가짜 마안 행동이 잘못됨");
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);

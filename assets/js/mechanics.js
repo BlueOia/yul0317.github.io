@@ -84,6 +84,15 @@ function gazeTextAnswer(truth) {
   return gazeActionAnswer(truth) === "바라보기" ? "마안 본다" : "마안 안본다";
 }
 
+function gazeShortAnswer(truth) {
+  return gazeActionAnswer(truth) === "바라보기" ? "본다" : "안본다";
+}
+
+function slowGazeMarkerFor(player, hasGaze) {
+  if (isSupportPlayer(player)) return hasGaze ? "2" : "1";
+  return hasGaze ? "3" : "4";
+}
+
 function thunderGazeMarkerGroups(player, thunderPattern, shouldSoakThunder, hasGaze) {
   const support = isSupportPlayer(player);
   const firstSide = support

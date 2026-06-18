@@ -496,6 +496,8 @@ function setSeqThunderGazeChoices(config) {
   seqNextBtn.disabled = true;
   seqNextBtn.textContent = "선택 필요";
   const state = { marker: "", gaze: "" };
+  const markerChoices = config.markerChoices || ["1", "2", "3", "4", "5", "6", "7", "8"];
+  const gazeChoices = config.gazeChoices || ["마안 본다", "마안 안본다"];
   seqChoices.innerHTML = `
     <div class="sim-choice-guide">
       <img loading="lazy" decoding="async" src="img/simul/${config.image}" alt="${config.imageAlt || ""}">
@@ -503,12 +505,12 @@ function setSeqThunderGazeChoices(config) {
     <div class="seq-choice-controls">
     <div class="sim-choice-board">
       <div class="sim-choice-group">
-        <div class="sim-choice-label">어디로 갈까요?</div>
-        ${["1", "2", "3", "4", "5", "6", "7", "8"].map((choice) => `<button class="sim-choice" type="button" data-part="marker" data-answer="${choice}">${choice}</button>`).join("")}
+        <div class="sim-choice-label">${config.markerLabel || "어디로 갈까요?"}</div>
+        ${markerChoices.map((choice) => `<button class="sim-choice" type="button" data-part="marker" data-answer="${choice}">${choice}</button>`).join("")}
       </div>
       <div class="sim-choice-group">
-        <div class="sim-choice-label">마안을 어떻게 할까요?</div>
-        ${["마안 본다", "마안 안본다"].map((choice) => `<button class="sim-choice" type="button" data-part="gaze" data-answer="${choice}">${choice}</button>`).join("")}
+        <div class="sim-choice-label">${config.gazeLabel || "마안을 어떻게 할까요?"}</div>
+        ${gazeChoices.map((choice) => `<button class="sim-choice" type="button" data-part="gaze" data-answer="${choice}">${choice}</button>`).join("")}
       </div>
     </div>
     </div>
@@ -1064,12 +1066,25 @@ function advanceSequential() {
       const action = personalGrandCrossAction(data, truth, accelAssignment);
       renderSeqBuffs();
       if (isGaze) {
-        setSeqChoices(
-          gazeChoices(action.hasGaze),
-          gazeChoiceAnswer(action.hasGaze, truth),
-          `${eventLabel(event)}은 ${truth}이므로 ${gazeChoiceAnswer(action.hasGaze, truth)}.`,
-          { handlingDebuff: handlingDebuffLine(icon("저주의 외침.webp", "저주의 외침"), truth), placeholder: true }
-        );
+        const markerAnswer = slowGazeMarkerFor(seq.player, action.hasGaze);
+        const gazeAnswerText = gazeShortAnswer(truth);
+        setSeqThunderGazeChoices({
+          image: "느린_마안.webp",
+          imageAlt: "느린 마안 처리 위치",
+          markerChoices: ["1", "2", "3", "4"],
+          markerLabel: "어디로 가야 하나요?",
+          markerAnswers: [markerAnswer],
+          gazeChoices: ["본다", "안본다"],
+          gazeLabel: "마안을?",
+          gazeAnswer: gazeAnswerText,
+          handlingDebuff: handlingDebuffLine(icon("저주의 외침.webp", "저주의 외침"), truth),
+          explain: [
+            isSupportPlayer(seq.player)
+              ? `탱커/힐러는 1, 2번을 사용하며 마안 ${action.hasGaze ? "대상자는 2번" : "비대상자는 1번"}입니다.`
+              : `딜러는 3, 4번을 사용하며 마안 ${action.hasGaze ? "대상자는 3번" : "비대상자는 4번"}입니다.`,
+            `마안은 ${truth}이므로 ${gazeAnswerText}가 정답입니다.`
+          ].join("<br>")
+        });
       } else {
         setSeqSpreadChoices(event, action, { placeholder: true });
       }
