@@ -725,6 +725,21 @@ function snapshotSeqStep(step) {
   body.appendChild(snapshot);
 }
 
+function scrollSeqExpansionIntoView(item) {
+  const container = item.closest(".seq-content");
+  if (!container) return;
+
+  const scroll = () => {
+    const containerRect = container.getBoundingClientRect();
+    const itemRect = item.getBoundingClientRect();
+    const top = Math.max(0, container.scrollTop + itemRect.top - containerRect.top - 3);
+    container.scrollTo({ top, behavior: "smooth" });
+  };
+
+  if (typeof requestAnimationFrame === "function") requestAnimationFrame(scroll);
+  else scroll();
+}
+
 function openSeqExpansion(step, options = {}) {
   const item = seqAccordion.querySelector(`.seq-expansion[data-step="${step}"]`);
   if (!item || !seqStepUnlocked(step)) return;
@@ -734,6 +749,7 @@ function openSeqExpansion(step, options = {}) {
   item.classList.add("open");
   item.querySelector(".seq-expansion-head")?.setAttribute("aria-expanded", "true");
   updateSeqAccordionState();
+  scrollSeqExpansionIntoView(item);
 }
 
 function updateSeqAccordionState() {
